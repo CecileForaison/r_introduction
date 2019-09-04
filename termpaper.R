@@ -6,11 +6,14 @@ library(grid)
 library(xlsx)
 library(gridExtra)
 
+# We select all of the .csv of the directory file select the important column, rename them and bind all of them in one tibble
 filenames <- dir(pattern = "*.csv")
 facebook_ads_data <- tibble()
 for (i in 1:length(filenames)) {
   facebook_ads_data <- read_csv(filenames[i])%>%
-    select(-Starts, -Ends, -"Reporting starts", -"Reporting ends") %>%
+    select("Ad name", "Ad set name", Day, "Ad delivery", Reach, Impressions, Frequency, "Result Type", Results, "Cost per result", "Amount spent (RUB)",
+          "CPM (cost per 1,000 impressions)", "Link clicks", "CPC (cost per link click)", "CTR (link click-through rate)", "CPC (all)", "CTR (all)",
+          "Clicks (all)", "Ad ID", "Campaign ID") %>%
     rename(ad_name = "Ad name",
            ad_set_name = "Ad set name",
            day = Day,
@@ -35,7 +38,10 @@ for (i in 1:length(filenames)) {
     bind_rows(facebook_ads_data)
 }
 
+# This is used to know how many different ad set we are working with and what their names are
 adsetnames <- unique(facebook_ads_data$ad_set_name)
+# This function waas created because else if for example there was no leads on one day, 
+# the Cost per lead would return "inf". We want it to return zero because it then makes it more clear that there was no leads
 divisionby0 <- function(nominator, denominator) {
   if (denominator == 0) {
     return(0)
@@ -45,6 +51,9 @@ divisionby0 <- function(nominator, denominator) {
   }
 }
 
+# This long for loop creates a dataframe for each ad set with the performances detailed for each ads.
+# It also creates 3 plots for each ad set to show the evolution of Impresssions, CPM, CPC and CPL 
+# At the end it combines the plots and the dataframe in a 1 page PDF
 for (i in 1:length(adsetnames)) {
     temp_df_summary <- facebook_ads_data %>%
     filter(ad_set_name == adsetnames[i],
@@ -57,6 +66,7 @@ for (i in 1:length(adsetnames)) {
                 CPC = divisionby0(sum(amount_spent, na.rm = TRUE), sum(link_clicks, na.rm = TRUE)),
                 Leads = sum(results, na.rm = TRUE),
                 CPL = divisionby0(sum(amount_spent, na.rm = TRUE),sum(results, na.rm = TRUE)))
+  # This is used to add a "Total" row to show the general performances of the ad set
     temp_df_summary <- rbind(temp_df_summary, tibble(ad_name = "Total", 
                               Impressions = sum(temp_df_summary$Impressions, na.rm = TRUE),
                               "Amount Spent (RUB)" = sum(temp_df_summary$`Amount Spent (RUB)`, na.rm = TRUE),
@@ -66,7 +76,8 @@ for (i in 1:length(adsetnames)) {
                               Leads = sum(temp_df_summary$Leads, na.rm = TRUE),
                               CPL = sum(`Amount Spent (RUB)`, na.rm = TRUE)/sum(Leads, na.rm = TRUE))) %>%
       arrange(-Impressions)
-    
+   
+  # Here is the plots that shows the evolution of impressions over the period
     plot_impressions <- 
       facebook_ads_data %>%
       filter(ad_set_name == adsetnames[i],
@@ -84,7 +95,7 @@ for (i in 1:length(adsetnames)) {
       xlab("Days")+
       theme_classic() 
 
-    
+    # Here is the plots that shows the evolution of CPM over the period
     plot_CPM <- 
       facebook_ads_data %>%
       filter(ad_set_name == adsetnames[i],
@@ -105,7 +116,8 @@ for (i in 1:length(adsetnames)) {
       geom_line(aes(y = CPM), color = "steelblue", size = 1, linetype = "dashed") +
       ylab("CPM (RUB)")+ xlab("Days") +
       theme_classic()
-
+  
+ # Here is the plots that shows the evolution of CPC and CPL over the period
     plot_CPC_CPL <- 
       facebook_ads_data %>%
       filter(ad_set_name == adsetnames[i],
@@ -144,7 +156,7 @@ for (i in 1:length(adsetnames)) {
     dev.off()
 }
 
-
+# This function is used to show which ads is over a KPI 
 least_effective_ads <- function(KPI, maximum) {
   for (i in 1:length(adsetnames)) {
     least_effect <- facebook_ads_data %>%
